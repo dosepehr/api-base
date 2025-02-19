@@ -33,8 +33,9 @@ const limiter = rateLimit({
 
 //* database setup
 require('dotenv').config();
-const { mongoDBInit } = require('./utils/funcs/db');
+const { mongoDBInit, redisInit } = require('./utils/funcs/db');
 mongoDBInit();
+redisInit();
 //* express app
 const app = express();
 app.use(cookieParser());
