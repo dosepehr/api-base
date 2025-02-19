@@ -34,6 +34,7 @@ const limiter = rateLimit({
 //* database setup
 require('dotenv').config();
 const { mongoDBInit, redisInit } = require('./utils/funcs/db');
+const userRouter = require('./modules/User/userRouter');
 mongoDBInit();
 redisInit();
 //* express app
@@ -76,6 +77,8 @@ app.route('/').all((_, res) => {
         message: 'welcome home:)',
     });
 });
+
+app.use('/api/v1/users', userRouter);
 
 //* 404 route
 app.all('*', async (req, res, next) => {
