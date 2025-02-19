@@ -23,7 +23,6 @@ const cookieParser = require('cookie-parser');
 const hpp = require('hpp');
 const compression = require('compression');
 
-
 const limiter = rateLimit({
     windowMs: 60 * 60 * 1000, // 15 minutes
     message: 'Too many requests from this IP, please try again in an hour',
@@ -34,7 +33,8 @@ const limiter = rateLimit({
 
 //* database setup
 require('dotenv').config();
-require('./utils/funcs/connectDB');
+const { mongoDBInit } = require('./utils/funcs/db');
+mongoDBInit();
 //* express app
 const app = express();
 app.use(cookieParser());
