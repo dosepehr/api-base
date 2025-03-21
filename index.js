@@ -35,6 +35,7 @@ const limiter = rateLimit({
 require('dotenv').config();
 const { mongoDBInit, redisInit } = require('./utils/funcs/db');
 const userRouter = require('./modules/User/userRouter');
+const authRouter = require('./modules/Auth/authRouter');
 mongoDBInit();
 redisInit();
 //* express app
@@ -78,6 +79,7 @@ app.route('/').all((_, res) => {
     });
 });
 
+app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/users', userRouter);
 
 //* 404 route
