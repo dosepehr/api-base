@@ -1,13 +1,21 @@
 const expressAsyncHandler = require('express-async-handler');
 const User = require('../User/userModel');
-const OTP = require('../Otp/otpModel');
 const { signAccessToken } = require('../../utils/funcs/token');
 const { hashPassword, comparePassword } = require('../../utils/funcs/password');
 // const Email = require('../../utils/Classes/Email');
+const { redisInit } = require('../../utils/funcs/db');
+
+const client = redisInit();
 
 exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
     const { phone } = req.body;
     const currentUser = await User.findOne({ phone });
+    const otp = await client.get(`${phone}-otp`);
+    if (otp) {
+        return res.status(400).json({
+            message: 'OTP already sent',
+        });
+    }
     if (currentUser) {
         if (currentUser.role == 'not-complete') {
             return res.status(403).json({
@@ -21,26 +29,20 @@ exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
     }
 
     const otpCode = Math.floor(10000 + Math.random() * 90000);
-
-    const otp = await OTP.create({
-        code: otpCode,
-        phone,
-        expiresAt: new Date(Date.now() + 2 * 60 * 1000),
-    });
+    await client.set(`${phone}-otp`, otpCode, { EX: 2 * 60 });
     return res.status(200).json({
         status: true,
-        data: otp,
     });
 });
 
 exports.verifyOtp = expressAsyncHandler(async (req, res, next) => {
-    const { otp, phone } = req.body;
-    const validOtp = await OTP.findOne({
-        phone,
-        code: otp,
-        expiresAt: { $gt: new Date(Date.now() - 2 * 60 * 1000) },
-    });
-    if (!validOtp) {
+    const { phone, code } = req.body;
+    const otp = await client.get(`${phone}-otp`);
+
+    if (!otp) {
+        return res.status(400).json({ message: 'no otp' });
+    }
+    if (otp != code) {
         return res.status(400).json({ message: 'no user' });
     } else {
         const user = await User.create({
@@ -51,6 +53,7 @@ exports.verifyOtp = expressAsyncHandler(async (req, res, next) => {
             username: `user-name-${phone}`,
         });
         const token = signAccessToken({ id: user._id });
+        await client.del(`${phone}-otp`);
         return res.status(200).json({ message: 'welcome', token });
     }
 });
@@ -153,3 +156,19 @@ exports.logout = expressAsyncHandler(async (req, res, next) => {
         message: 'Successfully logged out',
     });
 });
+
+// !!!
+// issues
+
+// Add proper rate limiting for OTP and login attempts
+// Implement a more secure OTP generation method
+// Add proper phone number validation
+// Implement a proper password reset flow
+// Add refresh token mechanism
+// Standardize error responses
+// Add proper input validation
+// Implement proper session management
+// Add logout functionality
+// Consider making the user data completion optional or allowing it to be completed later
+// Add proper security headers and cookie settings
+// Implement proper logging for security events
