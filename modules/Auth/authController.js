@@ -12,6 +12,10 @@ exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
     const currentUser = await User.findOne({ phone });
     const otp = await client.get(`${phone}-otp`);
     if (otp) {
+        await client.set(`${phone}-otp-attempts`, 0, {
+            EX: 2 * 60,
+        });
+
         return res.status(400).json({
             message: 'OTP already sent',
         });
@@ -38,12 +42,30 @@ exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
 exports.verifyOtp = expressAsyncHandler(async (req, res, next) => {
     const { phone, code } = req.body;
     const otp = await client.get(`${phone}-otp`);
+    const attempts =
+        parseInt(await client.get(`${phone}-otp-attempts`)) || 0;
 
     if (!otp) {
         return res.status(400).json({ message: 'no otp' });
     }
     if (otp != code) {
-        return res.status(400).json({ message: 'no user' });
+        if (attempts >= 5) {
+            await client.del(`${phone}-otp`);
+            await client.del(`${phone}-otp-attempts`);
+            return res.status(429).json({
+                status: false,
+                message: 'Too many attempts. Please try again later.',
+            });
+        }
+
+        await client.set(`${phone}-otp-attempts`, attempts + 1, {
+            EX: 2 * 60,
+        });
+
+        return res.status(400).json({
+            status: false,
+            message: 'Invalid OTP code',
+        });
     } else {
         const user = await User.create({
             phone,
