@@ -1,8 +1,8 @@
 const expressAsyncHandler = require('express-async-handler');
 const User = require('../User/userModel');
 const OTP = require('../Otp/otpModel');
-const { signToken } = require('../../utils/funcs/token');
-
+const { signAccessToken } = require('../../utils/funcs/token');
+const { hashPassword } = require('../../utils/funcs/password');
 exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
     const { phone } = req.body;
     const currentUser = await User.findOne({ phone });
@@ -43,46 +43,111 @@ exports.verifyOtp = expressAsyncHandler(async (req, res, next) => {
     } else {
         const user = await User.create({
             phone,
-            email: `user-email-${phone}@gmail.com`,
             name: ' ',
             role: 'not-complete',
             password: ' ',
             username: `user-name-${phone}`,
         });
-        const token = signToken({ id: user._id });
+        const token = signAccessToken({ id: user._id });
         return res.status(200).json({ message: 'welcome', token });
     }
 });
 
-exports.completeData = expressAsyncHandler(async (req, res, next) => {
-    const { email, name, password } = req.body;
-    const user = req.user;
-    user.email = email;
-    user.name = name;
-    user.password = password;
-    user.role = 'user';
-    await user.save();
-    const token = signToken({ id: user._id });
+exports.signup = expressAsyncHandler(async (req, res, next) => {
+    const JWT_ACCESS_SECRET = +process.env.JWT_ACCESS_SECRET.slice(0, 2);
+    console.log(JWT_ACCESS_SECRET);
+    const userData = {
+        name: req.body.name,
+        phone: req.body.phone,
+        password: req.body.password,
+        confirmPassword: req.body.confirmPassword,
+    };
+    // hash password
+    const hashedPassword = await hashPassword(req.body.password);
+    userData.password = hashedPassword;
+    userData.confirmPassword = undefined;
+    const newUser = await User.create(userData);
+    const token = signAccessToken({
+        id: newUser._id,
+    });
+    // send token by cookie
+    res.cookie('auth', `Bearer ${token}`, {
+        expires: new Date(Date.now() + JWT_ACCESS_SECRET * 24 * 60 * 60 * 1000),
+        secure: req.secure, // if https was on
+        httpOnly: true,
+    })
+        .status(201)
+        .json({
+            status: true,
+            token,
+        });
+    await new Email({ email: 'spehdo@gmail.com' }, '').sendWelcome();
+});
 
+exports.completeUserData = expressAsyncHandler(async (req, res, next) => {
+    const { name, password } = req.body;
+    const securePassword = await hashPassword(password);
+    const user = req.user;
+    await User.findByIdAndUpdate(user._id, {
+        name,
+        password: securePassword,
+        role: 'user',
+    });
     res.status(200).json({
-        message: 'User data updated successfully',
-        token,
+        status: true,
+        message: 'user data completed',
     });
 });
 
-exports.completeDataSeller = expressAsyncHandler(async (req, res, next) => {
-    const { email, name, password } = req.body;
-    const user = req.user;
-    user.email = email;
-    user.name = name;
-    user.password = password;
-    user.role = 'seller';
-    await user.save();
-    const token = signToken({ id: user._id });
+exports.login = expressAsyncHandler(async (req, res, next) => {
+    const JWT_ACCESS_SECRET = +process.env.JWT_ACCESS_SECRET.slice(0, 2);
 
-    res.status(200).json({
-        message: 'User data updated successfully',
-        token,
+    const userData = {
+        identifier: req.body.identifier,
+        password: req.body.password,
+    };
+    await loginUserSchema.validate(userData);
+    // find a user that its email or username matchs identifier
+    const user = await User.findOne({
+        $or: [
+            { email: userData.identifier },
+            { username: userData.identifier },
+        ],
+    }).select('password ban');
+    if (!user) {
+        res.status(404).json({
+            status: false,
+            message: 'no user found',
+        });
+    }
+    if (user.ban) {
+        res.status(403).json({
+            status: false,
+            message: 'banned user',
+        });
+    }
+    const canLogin = await comparePassword(userData.password, user.password);
+    if (canLogin) {
+        const token = signAccessToken({
+            id: user._id,
+        });
+        res.cookie('auth', `Bearer ${token}`, {
+            expires: new Date(
+                Date.now() + JWT_ACCESS_SECRET * 24 * 60 * 60 * 1000
+            ),
+            secure: req.secure, // if https was on
+            httpOnly: true,
+        })
+            .status(201)
+            .json({
+                status: true,
+                token,
+            });
+        await new Email({ email: 'spehdo@gmail.com' }, '').sendWelcome();
+    }
+    res.status(404).json({
+        status: false,
+        message: 'no user found',
     });
 });
 

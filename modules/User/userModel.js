@@ -5,17 +5,6 @@ const userSchema = new mongoose.Schema(
             type: String,
             required: true,
         },
-        username: {
-            type: String,
-            required: true,
-            unique: true,
-        },
-        email: {
-            type: String,
-            required: true,
-            unique: true,
-            lowercase: true,
-        },
         phone: {
             type: String,
             required: true,
@@ -24,24 +13,12 @@ const userSchema = new mongoose.Schema(
         },
         role: {
             type: String,
-            enum: ['user', 'admin', 'superAdmin'],
+            enum: ['user', 'not-complete', 'admin', 'superAdmin'],
             default: 'user',
-        },
-        photo: {
-            type: String,
-            default: 'pathToDefaultImage',
         },
         password: {
             type: String,
             required: true,
-        },
-        active: {
-            type: Boolean,
-            default: true,
-        },
-        ban: {
-            type: Boolean,
-            default: false,
         },
         passwordChangedAt: Date,
         passwordResetToken: String,
