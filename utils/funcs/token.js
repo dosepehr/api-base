@@ -2,15 +2,25 @@ const jwt = require('jsonwebtoken');
 const { promisify } = require('util');
 require('dotenv').config();
 
-const secretKey = process.env.JWT_SECRET;
-const expiresIn = process.env.JWT_EXPIRES;
+const accessSecretKey = process.env.JWT_ACCESS_SECRET;
+const refreshSecretKey = process.env.JWT_REFRESH_SECRET;
 
-exports.signToken = (payload) => {
-    const token = jwt.sign(payload, secretKey, {
-        expiresIn,
+const accessExpiresIn = process.env.JWT_ACCESS_EXPIRES;
+const refreshExpiresIn = process.env.JWT_REFRESH_EXPIRES;
+
+exports.signAccessToken = (payload) => {
+    const token = jwt.sign(payload, accessSecretKey, {
+        expiresIn: accessExpiresIn,
+    });
+    return token;
+};
+
+exports.signRefreshToken = (payload) => {
+    const token = jwt.sign(payload, refreshSecretKey, {
+        expiresIn: refreshExpiresIn,
     });
     return token;
 };
 
 exports.verifyToken = async (token) =>
-    await promisify(jwt.verify)(token, secretKey);
+    await promisify(jwt.verify)(token, accessSecretKey);
