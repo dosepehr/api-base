@@ -138,3 +138,18 @@ exports.getMe = expressAsyncHandler(async (req, res, next) => {
         data: user,
     });
 });
+
+exports.logout = expressAsyncHandler(async (req, res, next) => {
+    // Clear the auth cookie
+    res.clearCookie('auth', {
+        httpOnly: true,
+        secure: req.secure,
+        sameSite: 'strict',
+        expires: new Date(0), // Set expiration to past date to ensure cookie is removed
+    });
+
+    return res.status(200).json({
+        status: true,
+        message: 'Successfully logged out',
+    });
+});

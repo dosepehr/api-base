@@ -5,6 +5,7 @@ const {
     getMe,
     completeUserData,
     login,
+    logout,
 } = require('./authController');
 const {
     protect,
@@ -18,5 +19,6 @@ authRouter.post('/verifyOtp', verifyOtp);
 authRouter.post('/completeUserData', allowOnlyNotComplete, completeUserData);
 authRouter.post('/login', login);
 authRouter.get('/getMe', protect, getMe);
+authRouter.post('/logout', protect, logout);
 
 module.exports = authRouter;
