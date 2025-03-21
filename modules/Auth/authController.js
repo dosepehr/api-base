@@ -42,8 +42,7 @@ exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
 exports.verifyOtp = expressAsyncHandler(async (req, res, next) => {
     const { phone, code } = req.body;
     const otp = await client.get(`${phone}-otp`);
-    const attempts =
-        parseInt(await client.get(`${phone}-otp-attempts`)) || 0;
+    const attempts = parseInt(await client.get(`${phone}-otp-attempts`)) || 0;
 
     if (!otp) {
         return res.status(400).json({ message: 'no otp' });
@@ -179,18 +178,103 @@ exports.logout = expressAsyncHandler(async (req, res, next) => {
     });
 });
 
+exports.requestPasswordReset = expressAsyncHandler(async (req, res, next) => {
+    const { phone } = req.body;
+
+    // Check if user exists
+    const user = await User.findOne({ phone });
+    if (!user) {
+        return res.status(404).json({
+            status: false,
+            message: 'No user found with this phone number',
+        });
+    }
+
+    // Check if there's an existing reset OTP
+    const existingOtp = await client.get(`${phone}-reset-otp`);
+    if (existingOtp) {
+        return res.status(400).json({
+            status: false,
+            message:
+                'Reset OTP already sent. Please wait before requesting again',
+        });
+    }
+
+    // Generate and save reset OTP
+    const resetOtpCode = Math.floor(10000 + Math.random() * 90000);
+    await client.set(`${phone}-reset-otp`, resetOtpCode, {
+        EX: 10 * 60, // 10 minutes expiry
+    });
+
+    // TODO: Send OTP via SMS service
+    // For development, returning OTP in response
+    return res.status(200).json({
+        status: true,
+        message: 'Password reset OTP sent successfully',
+    });
+});
+
+exports.resetPassword = expressAsyncHandler(async (req, res, next) => {
+    const { phone, otp, newPassword } = req.body;
+
+    // Validate input
+    if (!phone || !otp || !newPassword) {
+        return res.status(400).json({
+            status: false,
+            message: 'Please provide phone, OTP and new password',
+        });
+    }
+
+    // Check if user exists
+    const user = await User.findOne({ phone });
+    if (!user) {
+        return res.status(404).json({
+            status: false,
+            message: 'No user found with this phone number',
+        });
+    }
+
+    // Verify OTP
+    const storedOtp = await client.get(`${phone}-reset-otp`);
+    if (!storedOtp || storedOtp != otp) {
+        return res.status(400).json({
+            status: false,
+            message: 'Invalid or expired OTP',
+        });
+    }
+
+    // Hash new password and update user
+    const hashedPassword = await hashPassword(newPassword);
+    await User.findByIdAndUpdate(user._id, {
+        password: hashedPassword,
+    });
+
+    // Clean up OTP
+    await client.del(`${phone}-reset-otp`);
+
+    // Generate new token
+    const token = signAccessToken({ id: user._id });
+
+    // Set cookie and return response
+    const JWT_ACCESS_EXPIRES = +process.env.JWT_ACCESS_EXPIRES.slice(0, 2);
+    return res
+        .cookie('auth', `Bearer ${token}`, {
+            expires: new Date(
+                Date.now() + JWT_ACCESS_EXPIRES * 24 * 60 * 60 * 1000
+            ),
+            secure: req.secure,
+            httpOnly: true,
+            sameSite: 'strict',
+        })
+        .status(200)
+        .json({
+            status: true,
+            message: 'Password reset successful',
+            token,
+        });
+});
+
 // !!!
 // issues
 
-// Add proper rate limiting for OTP and login attempts
-// Implement a more secure OTP generation method
-// Add proper phone number validation
-// Implement a proper password reset flow
 // Add refresh token mechanism
-// Standardize error responses
-// Add proper input validation
-// Implement proper session management
-// Add logout functionality
-// Consider making the user data completion optional or allowing it to be completed later
-// Add proper security headers and cookie settings
-// Implement proper logging for security events
