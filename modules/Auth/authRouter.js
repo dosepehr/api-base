@@ -4,6 +4,7 @@ const {
     verifyOtp,
     getMe,
     completeUserData,
+    login,
 } = require('./authController');
 const {
     protect,
@@ -15,6 +16,7 @@ const authRouter = express.Router();
 authRouter.post('/sendOtp', sendOtp);
 authRouter.post('/verifyOtp', verifyOtp);
 authRouter.post('/completeUserData', allowOnlyNotComplete, completeUserData);
+authRouter.post('/login', login);
 authRouter.get('/getMe', protect, getMe);
 
 module.exports = authRouter;

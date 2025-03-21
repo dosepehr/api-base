@@ -2,7 +2,9 @@ const expressAsyncHandler = require('express-async-handler');
 const User = require('../User/userModel');
 const OTP = require('../Otp/otpModel');
 const { signAccessToken } = require('../../utils/funcs/token');
-const { hashPassword } = require('../../utils/funcs/password');
+const { hashPassword, comparePassword } = require('../../utils/funcs/password');
+// const Email = require('../../utils/Classes/Email');
+
 exports.sendOtp = expressAsyncHandler(async (req, res, next) => {
     const { phone } = req.body;
     const currentUser = await User.findOne({ phone });
@@ -53,26 +55,24 @@ exports.verifyOtp = expressAsyncHandler(async (req, res, next) => {
     }
 });
 
-exports.signup = expressAsyncHandler(async (req, res, next) => {
-    const JWT_ACCESS_SECRET = +process.env.JWT_ACCESS_SECRET.slice(0, 2);
-    console.log(JWT_ACCESS_SECRET);
-    const userData = {
-        name: req.body.name,
-        phone: req.body.phone,
-        password: req.body.password,
-        confirmPassword: req.body.confirmPassword,
-    };
-    // hash password
-    const hashedPassword = await hashPassword(req.body.password);
-    userData.password = hashedPassword;
-    userData.confirmPassword = undefined;
-    const newUser = await User.create(userData);
-    const token = signAccessToken({
-        id: newUser._id,
+exports.completeUserData = expressAsyncHandler(async (req, res, next) => {
+    const JWT_ACCESS_EXPIRES = +process.env.JWT_ACCESS_EXPIRES.slice(0, 2);
+
+    const { name, password } = req.body;
+    const hashedPassword = await hashPassword(password);
+    const user = req.user;
+    await User.findByIdAndUpdate(user._id, {
+        name,
+        password: hashedPassword,
+        role: 'user',
     });
-    // send token by cookie
+    const token = signAccessToken({
+        id: user._id,
+    });
     res.cookie('auth', `Bearer ${token}`, {
-        expires: new Date(Date.now() + JWT_ACCESS_SECRET * 24 * 60 * 60 * 1000),
+        expires: new Date(
+            Date.now() + JWT_ACCESS_EXPIRES * 24 * 60 * 60 * 1000
+        ),
         secure: req.secure, // if https was on
         httpOnly: true,
     })
@@ -81,49 +81,27 @@ exports.signup = expressAsyncHandler(async (req, res, next) => {
             status: true,
             token,
         });
-    await new Email({ email: 'spehdo@gmail.com' }, '').sendWelcome();
-});
-
-exports.completeUserData = expressAsyncHandler(async (req, res, next) => {
-    const { name, password } = req.body;
-    const securePassword = await hashPassword(password);
-    const user = req.user;
-    await User.findByIdAndUpdate(user._id, {
-        name,
-        password: securePassword,
-        role: 'user',
-    });
-    res.status(200).json({
-        status: true,
-        message: 'user data completed',
-    });
+    // await new Email({ email: 'spehdo@gmail.com' }, '').sendWelcome();
 });
 
 exports.login = expressAsyncHandler(async (req, res, next) => {
-    const JWT_ACCESS_SECRET = +process.env.JWT_ACCESS_SECRET.slice(0, 2);
+    const JWT_ACCESS_EXPIRES = +process.env.JWT_ACCESS_EXPIRES.slice(0, 2);
 
     const userData = {
         identifier: req.body.identifier,
         password: req.body.password,
     };
-    await loginUserSchema.validate(userData);
     // find a user that its email or username matchs identifier
     const user = await User.findOne({
         $or: [
-            { email: userData.identifier },
-            { username: userData.identifier },
+            { phone: userData.identifier },
+            // other props
         ],
-    }).select('password ban');
+    }).select('password');
     if (!user) {
         res.status(404).json({
             status: false,
             message: 'no user found',
-        });
-    }
-    if (user.ban) {
-        res.status(403).json({
-            status: false,
-            message: 'banned user',
         });
     }
     const canLogin = await comparePassword(userData.password, user.password);
@@ -131,19 +109,20 @@ exports.login = expressAsyncHandler(async (req, res, next) => {
         const token = signAccessToken({
             id: user._id,
         });
-        res.cookie('auth', `Bearer ${token}`, {
-            expires: new Date(
-                Date.now() + JWT_ACCESS_SECRET * 24 * 60 * 60 * 1000
-            ),
-            secure: req.secure, // if https was on
-            httpOnly: true,
-        })
+        return res
+            .cookie('auth', `Bearer ${token}`, {
+                expires: new Date(
+                    Date.now() + JWT_ACCESS_EXPIRES * 24 * 60 * 60 * 1000
+                ),
+                secure: req.secure, // if https was on
+                httpOnly: true,
+            })
             .status(201)
             .json({
                 status: true,
                 token,
             });
-        await new Email({ email: 'spehdo@gmail.com' }, '').sendWelcome();
+        // await new Email({ email: 'spehdo@gmail.com' }, '').sendWelcome();
     }
     res.status(404).json({
         status: false,
